@@ -1,103 +1,50 @@
 (ns busquedas-no-informadas.core
   (:require [clojure.core.matrix :as matrix]
-            [busquedas-no-informadas.arbol :as arbol]
-            [busquedas-no-informadas.utilidades :as u])
+            [busquedas-no-informadas.grafo :as grafo]
+            [busquedas-no-informadas.utilidades :as u]
+            [busquedas-no-informadas.espacio-estados :as ee]
+            [cheshire.core :refer :all])
   (:gen-class))
 
-(def j-1 "B")
-(def j-2 "N")
+(def grafo (atom {}))
 
-(def posicion-inicial [[j-1 u/n u/n u/n j-2]
-                       [j-1 u/n u/n u/n j-2]
-                       [j-1 u/n u/n u/n j-2]
-                       [j-1 u/n u/n u/n j-2]])
+(defn generar-grafo-jugadas [matriz nivel]
+  "Crea el grafo de jugadas con los movimientos permitidos de acuerdo al espacio de estados"
+  (if (or (= ee/posicion-final matriz) (= nivel 20))
+    (u/convertir-a-cadena matriz)
+    (let [[jt je] (if (= 0 (mod nivel 2)) [ee/j-1 ee/j-2] [ee/j-2 ee/j-1])
+          pm-jt (ee/obtener-posibles-mov-jugador jt matriz)
+          pm-je (reduce into (map second (ee/obtener-posibles-mov-jugador je matriz)))
+          mov-per-jt (grafo/crear-ramas matriz (ee/calcular-movimientos-permitidos pm-jt pm-je) jt)
+          siguiente (inc nivel)
+          matriz-str (u/convertir-a-cadena matriz)]
+      (doseq [nodo mov-per-jt]
+        (swap! grafo grafo/adicionar-enlace matriz-str (u/convertir-a-cadena nodo))
+        (generar-grafo-jugadas nodo siguiente)))))
 
-(def posicion-final [[j-2 u/n u/n u/n j-1]
-                     [j-2 u/n u/n u/n j-1]
-                     [j-2 u/n u/n u/n j-1]
-                     [j-2 u/n u/n u/n j-1]])
+(defn busqueda-por-profundidad []
+  (println "Busqueda por Profundidad ")
+  (reset! grafo {})
+  (generar-grafo-jugadas ee/posicion-inicial 0)
+  (let [matriz-inicial (u/convertir-a-cadena ee/posicion-inicial)
+        matriz-final (u/convertir-a-cadena ee/posicion-final)
+        fn-objetivo (fn [matriz] (= matriz-final matriz))
+        recorrido (grafo/depth-first-search @grafo matriz-inicial fn-objetivo)]
+    (prn recorrido)))
 
-(def filas (matrix/dimension-count posicion-inicial 0))
-(def columnas (matrix/dimension-count posicion-inicial 1))
-
-(defn obtener-posiciones-jugador [jugador matriz]
-  "Permite obtener las posiciones en las que se encuentran los alfiles de un jugador"
-  (for [[x row] (map-indexed vector matriz) 
-        [y val] (map-indexed vector row) 
-        :when (= jugador val)]
-    [x y]))
-
-(defn dentro-rango
-  "Valida si el elemento se encuentra dentro del rango minimo-maximo (minimo <= elemento < maximo)"
-  [elemento min max]
-  (and (>= elemento min) (< elemento max)))
-
-(defn obtener-movimientos [[x y] otras-fichas f-x f-y]
-  "Permite obtener los movimientos que se pueden realizar dada la posicion"
-  (loop [i (f-x x)
-         j (f-y y)
-         mov []]
-    (if (and (dentro-rango i 0 filas) (dentro-rango j 0 columnas))
-      (recur (f-x i) (f-y j) (if (some #{[i j]} otras-fichas)
-                               mov
-                               (conj mov [i j])))
-      mov)))
-
-(defn anexar-movimientos [mov-add mov]
-  (if-not (empty? mov-add)
-    (into mov mov-add)
-    mov))
-
-(defn obtener-posibles-mov-jugador [jugador matriz]
-  "Permite obtener los posibles movimientos que un jugador puede realizar en la matriz"
-  (let [posicion-fichas-jugador (obtener-posiciones-jugador jugador matriz)]
-    (map (fn [coord]
-           (let [otras-coord (remove #{coord} posicion-fichas-jugador)
-                 mov-decdec (obtener-movimientos coord otras-coord dec dec)
-                 mov-decinc (obtener-movimientos coord otras-coord dec inc)
-                 mov-incdec (obtener-movimientos coord otras-coord inc dec)
-                 mov-incinc (obtener-movimientos coord otras-coord inc inc)]
-             [coord  (-> (anexar-movimientos [] mov-decdec)                  
-                         (anexar-movimientos mov-decinc)
-                         (anexar-movimientos mov-incdec)
-                         (anexar-movimientos mov-incinc))]))
-         posicion-fichas-jugador)))
-
-(defn obtener-movimiento-permitidos [movimientos-jugador-turno movimientos-jugador-espera]
-  (filter (fn [coord] (not (some #{coord} movimientos-jugador-espera))) movimientos-jugador-turno))
-
-(defn calcular-movimientos-permitidos [mov-jt mov-je]
-  (map (fn [[coord movs]]
-         [coord (obtener-movimiento-permitidos movs mov-je)]) mov-jt))
-
-(defn buscar-solucion [jt je ramas nivel]
-  (loop [[nodo-1 & resto-nodos] ramas
-         ultimo-movimiento {jt (:nueva-posicion nodo-1)}
-         arbol []]
-    (let [matriz (:matriz nodo-1)
-          pm-jt (obtener-posibles-mov-jugador jt matriz)
-          pm-je (reduce into (map second (obtener-posibles-mov-jugador je posicion-inicial)))
-          mov-per-b (calcular-movimientos-permitidos pm-jt pm-je)
-          nodos (arbol/crear-ramas posicion-inicial mov-per-b jt)]
-      (cond
-        (> nivel 2) (cons nodo-1 arbol)
-        (nil? nodo-1) arbol
-        :else
-        (recur resto-nodos
-               (assoc ultimo-movimiento jt (:nueva-posicion nodo-1))
-               (cons arbol (buscar-solucion je jt nodos (inc nivel)))))))) 
-
-(let [pm-b (obtener-posibles-mov-jugador j-1 posicion-inicial)
-      pm-n (reduce into (map second (obtener-posibles-mov-jugador j-2 posicion-inicial)))
-      mov-per-b (calcular-movimientos-permitidos pm-b pm-n)
-      ramas (arbol/crear-ramas posicion-inicial mov-per-b j-1)]
-  (println (buscar-solucion j-2 j-1 ramas 0)))
-
-(u/imprimir-matriz posicion-inicial)
-
-(defn busqueda-no-informadas
-  [x]
-  (println "Hola " x))
+(defn busqueda-por-amplitud []
+  (println "Busqueda por Amplitud ")
+  (reset! grafo {})
+  (generar-grafo-jugadas ee/posicion-inicial 0)
+  (let [matriz-inicial (u/convertir-a-cadena ee/posicion-inicial)
+        matriz-final (u/convertir-a-cadena ee/posicion-final)
+        fn-objetivo (fn [matriz] (= matriz-final matriz))
+        recorrido (grafo/breath-first-search @grafo matriz-inicial fn-objetivo)]
+    (prn recorrido)))
 
 (defn -main []
-  (busqueda-no-informadas "Busqueda No Informadas"))
+  (println "Seleccione el tipo de busqueda: \n 1. Profundidad\n 2.Amplitud")
+  (condp (read)
+      (= 1)  (busqueda-por-profundidad)
+      (= 2)  (busqueda-por-amplitud)
+      :else (println "Lo sentimos, opcion incorrecta.")))
