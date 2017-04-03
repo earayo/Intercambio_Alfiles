@@ -1,28 +1,28 @@
 (ns busquedas-no-informadas.espacio-estados
   (:require [clojure.string :as str]
             [clojure.core.matrix :as matrix]
-            [busquedas-no-informadas.arbol :as arbol]
-            [busquedas-no-informadas.utilidades :as u]
-            [cheshire.core :refer :all]))
+            [busquedas-no-informadas.utilidades :as u]))
 
-(def j-1 "B")
-(def j-2 "N")
+;; Definicion de variables
+(def j-1 "B") ;; Jugador con alfiles Blancos
+(def j-2 "N") ;; Jugador con alfiles Negros
 
 (def posicion-inicial [[j-1 u/n u/n u/n j-2]
                        [j-1 u/n u/n u/n j-2]
                        [j-1 u/n u/n u/n j-2]
-                       [j-1 u/n u/n u/n j-2]])
+                       [j-1 u/n u/n u/n j-2]]) ;; Estado Inicial
 
 (def posicion-final [[j-2 u/n u/n u/n j-1]
                      [j-2 u/n u/n u/n j-1]
                      [j-2 u/n u/n u/n j-1]
-                     [j-2 u/n u/n u/n j-1]])
+                     [j-2 u/n u/n u/n j-1]]) ;; Estado Final
 
 (def filas (matrix/dimension-count posicion-inicial 0))
 (def columnas (matrix/dimension-count posicion-inicial 1))
 
-(defn obtener-posiciones-jugador [jugador matriz]
+(defn obtener-posiciones-jugador
   "Permite obtener las posiciones en las que se encuentran los alfiles de un jugador"
+  [jugador matriz]
   (for [[x row] (map-indexed vector matriz) 
         [y val] (map-indexed vector row) 
         :when (= jugador val)]
@@ -33,8 +33,9 @@
   [elemento min max]
   (and (>= elemento min) (< elemento max)))
 
-(defn obtener-movimientos [[x y] otras-fichas f-x f-y]
+(defn obtener-movimientos 
   "Permite obtener los movimientos que se pueden realizar dada la posicion"
+  [[x y] otras-fichas f-x f-y]
   (loop [i (f-x x)
          j (f-y y)
          mov []]
@@ -44,8 +45,9 @@
         (recur (f-x i) (f-y j) (conj mov [i j])))
       mov)))
 
-(defn anexar-movimientos [mov-add mov]
+(defn anexar-movimientos 
   "Permite el anexo de movimientos que pueden ser realizados por un alfil"
+  [mov-add mov]
   (if-not (empty? mov-add)
     (into mov mov-add)
     mov))
